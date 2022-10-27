@@ -78,48 +78,61 @@ function Tilemap:draw(x, y, _sourceRect)
     end
 
     local current_tile_x = tile_x
-    local current_draw_x = draw_x
-
     local current_tile_y = tile_y
+
+    local current_draw_x = draw_x
     local current_draw_y = draw_y
 
-    while((current_draw_y < display_height) and (current_tile_y < self.height)) do
-        while((current_draw_x < display_width) and (current_tile_x < self.width)) do
-            local tile_index = self.map[(current_tile_y * self.width) + current_tile_x]
-            if tile_index ~= 0 then
-                local image = self.image_table:getImage(tile_index)
+    local width <const> = self.width
+    local height <const> = self.height
+    local map <const> = self.map
+    local table <const> = self.image_table
+
+    local tile_index = (current_tile_y * width) + current_tile_x
+    while((current_draw_y < display_height) and (current_tile_y < height)) do
+        local next_tile_index_offset = width
+
+        while((current_draw_x < display_width) and (current_tile_x < width)) do
+            local image_index = map[tile_index]
+            if image_index ~= 0 then
+                local image = table:getImage(image_index)
                 if image ~= nil then
                     image:draw(current_draw_x, current_draw_y)
                 end
             end
 
+            next_tile_index_offset = next_tile_index_offset - 1
+            tile_index = tile_index + 1
+
             current_draw_x = current_draw_x + image_width
             current_tile_x = current_tile_x + 1
         end
 
-        current_draw_y = current_draw_y + image_height
-        current_tile_y = current_tile_y + 1
+        tile_index = tile_index + next_tile_index_offset
 
         current_tile_x = tile_x
+        current_tile_y = current_tile_y + 1
+
         current_draw_x = draw_x
+        current_draw_y = current_draw_y + image_height
     end
 
     local debug = false
     if debug then
         local text = "xy: "..tostring(x)..' '..tostring(y)
-        local width, height = gfx.getTextSize(text)
-        gfx.fillRect(0, 30, width, height)
+        local text_width, text_height = gfx.getTextSize(text)
+        gfx.fillRect(0, 30, text_width, text_height)
         gfx.setImageDrawMode("fillWhite")
         gfx.drawText(text, 0, 30)
 
         text = "draw: "..tostring(draw_x)..' '..tostring(draw_y)
-        width, height = gfx.getTextSize(text)
-        gfx.fillRect(0, 50, width, height)
+        text_width, text_height = gfx.getTextSize(text)
+        gfx.fillRect(0, 50, text_width, text_height)
         gfx.drawText(text, 0, 50)
 
         text = "tile: "..tostring(tile_x)..' '..tostring(tile_y)
-        width, height = gfx.getTextSize(text)
-        gfx.fillRect(0, 70, width, height)
+        text_width, text_height = gfx.getTextSize(text)
+        gfx.fillRect(0, 70, text_width, text_height)
         gfx.drawText(text, 0, 70)
     end
 end
