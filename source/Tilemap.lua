@@ -17,6 +17,8 @@ function Tilemap:init()
 
     self.image_table = nil
     self.map = nil
+
+    self.height = 0
     self.width = 0
 
     self.tile_width = 0
