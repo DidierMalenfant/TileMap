@@ -126,7 +126,6 @@ end
 
 -- Sets the index of the tile at tilemap position (x, y). index is the (1-based) index of the image
 -- in the tilemap’s playdate.graphics.imagetable.
-    -- print(tostring(x + ((y - 1) * self.width))..': '..tostring(index))
 function Tilemap:setTileAtPosition(x, y, index)
     self.map[(x - 1) + ((y - 1) * self.width)] = index
 end
