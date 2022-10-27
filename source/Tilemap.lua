@@ -18,11 +18,18 @@ function Tilemap:init()
     self.image_table = nil
     self.map = nil
     self.width = 0
+
+    self.tile_width = 0
+    self.tile_height = 0
 end
 
 -- Sets the tilemap’s playdate.graphics.imagetable to table, a playdate.graphics.imagetable.
 function Tilemap:setImageTable(table)
     self.image_table = table
+
+    local image = self.image_table:getImage(1)
+    self.tile_width = image.width
+    self.tile_height = image.height
 end
 
 -- Sets the tilemap’s width to width, then populates the tilemap with data, which should be
@@ -148,6 +155,5 @@ end
 
 -- Returns multiple values (width, height), the pixel width and height of an individual tile.
 function Tilemap:getTileSize()
-    local image = self.image_table:getImage(1)
-    return image.width, image.height
+    return self.tile_width, self.tile_height
 end
