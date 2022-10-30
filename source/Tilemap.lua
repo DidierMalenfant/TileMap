@@ -6,14 +6,14 @@ import "CoreLibs/object"
 
 dm = dm or {}
 
-class('Tilemap', { }, dm).extends()
+class('LuaTilemap', { }, dm).extends()
 
-local Tilemap <const> = dm.Tilemap
+local LuaTilemap <const> = dm.LuaTilemap
 local gfx <const> = playdate.graphics
 local display_width <const>, display_height <const> = playdate.display.getSize()
 
-function Tilemap:init()
-    Tilemap.super.init(self)
+function LuaTilemap:init()
+    LuaTilemap.super.init(self)
 
     self.image_table = nil
     self.map = nil
@@ -26,17 +26,17 @@ function Tilemap:init()
 end
 
 -- Sets the tilemap’s playdate.graphics.imagetable to table, a playdate.graphics.imagetable.
-function Tilemap:setImageTable(table)
+function LuaTilemap:setImageTable(table)
     self.image_table = table
 
-    local image = self.image_table:getImage(1)
+    local image <const> = self.image_table:getImage(1)
     self.tile_width = image.width
     self.tile_height = image.height
 end
 
 -- Sets the tilemap’s width to width, then populates the tilemap with data, which should be
 -- a flat, one-dimensional array-like table containing index values to the tilemap’s imagetable.
-function Tilemap:setTiles(data, width)
+function LuaTilemap:setTiles(data, width)
     self.map = data
     self.width = width
 end
@@ -44,14 +44,14 @@ end
 -- Returns data, width
 -- data is a flat, one-dimensional array-like table containing index values to the tilemap’s imagetable.
 -- width is the width of the tile map, in number of tiles.
-function Tilemap:getTiles()
+function LuaTilemap:getTiles()
     return self.data, self.width
 end
 
 -- Draws the tile map at screen coordinate (x, y).
 -- sourceRect, if specified, will cause only the part of the tilemap within sourceRect to be drawn.
-function Tilemap:draw(x, y, _sourceRect)
-    local image_width, image_height = self:getTileSize()
+function LuaTilemap:draw(x, y, _sourceRect)
+    local image_width, image_height <const> = self:getTileSize()
 
     local draw_x = x
     local draw_y = y
@@ -139,35 +139,35 @@ end
 
 -- Sets the index of the tile at tilemap position (x, y). index is the (1-based) index of the image
 -- in the tilemap’s playdate.graphics.imagetable.
-function Tilemap:setTileAtPosition(x, y, index)
+function LuaTilemap:setTileAtPosition(x, y, index)
     self.map[(x - 1) + ((y - 1) * self.width)] = index
 end
 
 -- Returns the image index of the tile at the given x and y coordinate. If x or y is out of bounds, returns nil.
-function Tilemap:getTileAtPosition(x, y)
+function LuaTilemap:getTileAtPosition(x, y)
     return self.map[x + ((y - 1) * self.width)]
 end
 
 -- Sets the tilemap’s width and height, in number of tiles.
-function Tilemap:setSize(width, height)
+function LuaTilemap:setSize(width, height)
     self.width = width
     self.height = height
     self.map = {}
 end
 
 -- Returns the size of the tile map, in tiles, as a pair, (width, height).
-function Tilemap:getSize()
+function LuaTilemap:getSize()
     return self.width, self.height
 end
 
 -- Returns the size of the tilemap in pixels; that is, the size of the image multiplied by the number of
 -- rows and columns in the map. Returns multiple alues (width, height).
-function Tilemap:getPixelSize()
-    local image_width, image_height = self:getTileSize()
+function LuaTilemap:getPixelSize()
+    local image_width, image_height <const> = self:getTileSize()
     return self.width * image_width, self.height * image_height
 end
 
 -- Returns multiple values (width, height), the pixel width and height of an individual tile.
-function Tilemap:getTileSize()
+function LuaTilemap:getTileSize()
     return self.tile_width, self.tile_height
 end

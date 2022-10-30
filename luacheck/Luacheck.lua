@@ -14,6 +14,18 @@ return {
             fields = {
                 Tilemap = {
                     fields = {
+                        new = {},
+                        draw = {},
+                        setTileAtPosition = {},
+                        getTileAtPosition = {},
+                        setSize = {},
+                        getSize = {},
+                        getPixelSize = {},
+                        getTileSize = {}
+                    }
+                },
+                LuaTilemap = {
+                    fields = {
                         super = {
                             fields = {
                                 className = {},
