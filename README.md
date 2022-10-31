@@ -19,6 +19,8 @@ import '../toyboxes/toyboxes.lua'
 
 This **toybox** contains **Lua** toys for you to play with.
 
+‼️ This **toybox** is in active development, the API can change at any time... ‼️
+
 ---
 
 ## License
