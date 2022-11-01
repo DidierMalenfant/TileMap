@@ -22,6 +22,9 @@ typedef struct {
 
     int tile_width;
     int tile_height;
+
+    int nb_of_tiles;
+    LCDBitmap** tiles;
     
     uint16_t* map;
 } Tilemap;
@@ -45,8 +48,8 @@ extern void register_Tilemap(PlaydateAPI* api)
 // -- Allocate a new tilemap
 int tilemapNew(lua_State* L)
 {
-    Tilemap* map = dmMemoryCalloc(1, sizeof(Tilemap));
-    if (map == NULL) {
+    Tilemap* this = dmMemoryCalloc(1, sizeof(Tilemap));
+    if (this == NULL) {
         return 0;
     }
 
@@ -57,16 +60,31 @@ int tilemapNew(lua_State* L)
     }
 
     const char* err = NULL;
-    map->image_table = pd->graphics->loadBitmapTable(path, &err);
-    if (map->image_table == NULL) {
+    this->image_table = pd->graphics->loadBitmapTable(path, &err);
+    if (this->image_table == NULL) {
         DM_LOG("Tilemap: Error loading image table '%s' (%s).", path, (err != NULL) ? err : "Unknown Error");
         return 0;
     }
 
-    map->height = 0;
-    map->width = 0;
+    this->nb_of_tiles = 0;
+    for (; ;++this->nb_of_tiles) {
+        LCDBitmap* bitmap = pd->graphics->getTableBitmap(this->image_table, this->nb_of_tiles);
+        if (bitmap == NULL) {
+            break;
+        }
+    }
 
-    LCDBitmap* bitmap = pd->graphics->getTableBitmap(map->image_table, 1);
+    DM_LOG("Found %d tiles.", this->nb_of_tiles);
+    this->tiles = dmMemoryCalloc(this->nb_of_tiles, sizeof(LCDBitmap*));
+
+    for (int index = 0; index < this->nb_of_tiles;++index) {
+        this->tiles[index] = pd->graphics->getTableBitmap(this->image_table, index);
+    }
+    
+    this->height = 0;
+    this->width = 0;
+
+    LCDBitmap* bitmap = pd->graphics->getTableBitmap(this->image_table, 1);
     if (bitmap == NULL) {
         DM_LOG("Tilemap: Error getting bitmap from image table '%s'.", path);
         return 0;
@@ -75,14 +93,14 @@ int tilemapNew(lua_State* L)
     int width, height;
     pd->graphics->getBitmapData(bitmap, &width, &height, NULL, NULL, NULL);
 
-    map->tile_height = width;
-    map->tile_width = height;
+    this->tile_height = width;
+    this->tile_width = height;
     
     pd->graphics->freeBitmap(bitmap);
 
-    map->map = NULL;
+    this->map = NULL;
 
-    pd->lua->pushObject(map, CLASSNAME_TILEMAP, 0);
+    pd->lua->pushObject(this, CLASSNAME_TILEMAP, 0);
 
     return 1;
 }
@@ -90,23 +108,29 @@ int tilemapNew(lua_State* L)
 // -- Delete the tilemap
 int tilemapDelete(lua_State* L)
 {
-    Tilemap* map = GET_TILEMAP_ARG(1);
-    if(map == NULL) {
+    Tilemap* this = GET_TILEMAP_ARG(1);
+    if(this == NULL) {
         DM_LOG("Tilemap: Error getting 'self' argument.");
         return 0;
     }
     
-    if (map->image_table != NULL) {
-        pd->graphics->freeBitmapTable(map->image_table);
-        map->image_table = NULL;
+    if (this->image_table != NULL) {
+        pd->graphics->freeBitmapTable(this->image_table);
+        this->image_table = NULL;
     }
     
-    if (map->map != NULL) {
-        dmMemoryFree(map->map);
-        map->map = NULL;
+    if (this->tiles != NULL) {
+        dmMemoryFree(this->tiles);
+        this->image_table = NULL;
+        this->nb_of_tiles = 0;
     }
     
-    dmMemoryFree(map);
+    if (this->map != NULL) {
+        dmMemoryFree(this->map);
+        this->map = NULL;
+    }
+    
+    dmMemoryFree(this);
     
     return 0;
 }
@@ -116,19 +140,19 @@ int tilemapDelete(lua_State* L)
 // function Tilemap:draw(x, y, _sourceRect)
 int tilemapDraw(lua_State* L)
 {
-    Tilemap* map = GET_TILEMAP_ARG(1);
-    if(map == NULL) {
+    Tilemap* this = GET_TILEMAP_ARG(1);
+    if(this == NULL) {
         DM_LOG("Tilemap: Error getting 'self' argument.");
         return 0;
     }
 
-    if (map->map == NULL) {
+    if (this->map == NULL) {
         DM_LOG("Tilemap: Size of tilemap not set before draw().");
         return 0;
     }
     
-    int image_width = map->tile_width;
-    int image_height = map->tile_height;
+    int image_width = this->tile_width;
+    int image_height = this->tile_height;
 
     int x = pd->lua->getArgInt(2);
     int y = pd->lua->getArgInt(3);
@@ -144,7 +168,7 @@ int tilemapDraw(lua_State* L)
         tile_x = (int)((draw_x - x) / image_width);
     }
 
-    if (tile_x >= map->width) {
+    if (tile_x >= this->width) {
         return 0;
     }
 
@@ -153,7 +177,7 @@ int tilemapDraw(lua_State* L)
         tile_y = (int)((draw_y - y) / image_height);
     }
 
-    if (tile_y >= map->height) {
+    if (tile_y >= this->height) {
         return 0;
     }
 
@@ -163,35 +187,43 @@ int tilemapDraw(lua_State* L)
     int current_draw_x = draw_x;
     int current_draw_y = draw_y;
 
-    int width = map->width;
-    int height = map->height;
-    uint16_t* tilemap = map->map;
-    LCDBitmapTable* table = map->image_table;
+    int width = this->width;
+    int height = this->height;
+    uint16_t* tilemap = this->map;
+    LCDBitmapTable* table = this->image_table;
 
     int display_width = pd->display->getWidth();
     int display_height = pd->display->getHeight();
 
-    int tile_index = (current_tile_y * width) + current_tile_x;
+    int tilemap_index = (current_tile_y * width) + current_tile_x;
     while((current_draw_y < display_height) && (current_tile_y < height)) {
-        int next_tile_index_offset = width;
+        int next_tilemap_index_offset = width;
 
         while((current_draw_x < display_width) && (current_tile_x < width)) {
-            int image_index = tilemap[tile_index];
-            if (image_index != 0) {
-                LCDBitmap* bitmap = pd->graphics->getTableBitmap(map->image_table, image_index);
-                if (bitmap != NULL) {
+            int tile_index = tilemap[tilemap_index] - 1;
+            if (tile_index != 0) {
+                /*
+                if (tile_index >= this->nb_of_tiles) {
+                    DM_LOG("Tilemap: Invalid tile index %d.", tile_index);
+                    return 0;
+                }*/
+                
+                LCDBitmap* bitmap = this->tiles[tile_index];
+                //LCDBitmap* bitmap = pd->graphics->getTableBitmap(this->image_table, tile_index);
+                //if (bitmap != NULL) {
                     pd->graphics->drawBitmap(bitmap, current_draw_x, current_draw_y, kBitmapUnflipped);
-                }
+                    //pd->graphics->drawBitmap(otherBitmap, current_draw_x, current_draw_y, kBitmapUnflipped);
+                //}
             }
 
-            next_tile_index_offset -= 1;
-            tile_index += 1;
+            next_tilemap_index_offset -= 1;
+            tilemap_index += 1;
 
             current_draw_x += image_width;
             current_tile_x += 1;
         }
 
-        tile_index += next_tile_index_offset;
+        tilemap_index += next_tilemap_index_offset;
 
         current_tile_x = tile_x;
         current_tile_y += 1;
@@ -208,13 +240,13 @@ int tilemapDraw(lua_State* L)
 // function Tilemap:setTileAtPosition(x, y, index)
 int tilemapSetTileAtPosition(lua_State* L)
 {
-    Tilemap* map = GET_TILEMAP_ARG(1);
-    if(map == NULL) {
+    Tilemap* this = GET_TILEMAP_ARG(1);
+    if(this == NULL) {
         DM_LOG("Tilemap: Error getting 'self' argument.");
         return 0;
     }
     
-    if (map->map == NULL) {
+    if (this->map == NULL) {
         DM_LOG("Tilemap: Size of tilemap not set before setTileAtPosition().");
         return 0;
     }
@@ -222,18 +254,18 @@ int tilemapSetTileAtPosition(lua_State* L)
     int x = pd->lua->getArgInt(2);
     int y = pd->lua->getArgInt(3);
     
-    if ((x < 1) || (x > map->width) || (y < 1) || (y > map->height)) {
+    if ((x < 1) || (x > this->width) || (y < 1) || (y > this->height)) {
         DM_LOG("Tilemap: Out of bounds values %d,%s for getTileAtPosition.", x, y);
         return 0;
     }
 
-    int tile_index = pd->lua->getArgInt(4);
-    if (tile_index < 0) {
-        DM_LOG("Tilemap: Out of bounds tile index %d for getTileAtPosition.", tile_index);
+    int tilemap_index = pd->lua->getArgInt(4);
+    if (tilemap_index < 0) {
+        DM_LOG("Tilemap: Out of bounds tile index %d for getTileAtPosition.", tilemap_index);
         return 0;
     }
     
-    map->map[((y - 1) * map->width) + (x - 1)] = tile_index;
+    this->map[((y - 1) * this->width) + (x - 1)] = tilemap_index;
 
     return 0;
 }
@@ -242,13 +274,13 @@ int tilemapSetTileAtPosition(lua_State* L)
 // function Tilemap:getTileAtPosition(x, y)
 int tilemapGetTileAtPosition(lua_State* L)
 {
-    Tilemap* map = GET_TILEMAP_ARG(1);
-    if(map == NULL) {
+    Tilemap* this = GET_TILEMAP_ARG(1);
+    if(this == NULL) {
         DM_LOG("Tilemap: Error getting 'self' argument.");
         return 0;
     }
 
-    if (map->map == NULL) {
+    if (this->map == NULL) {
         DM_LOG("Tilemap: Size of tilemap not set before getTileAtPosition().");
         return 0;
     }
@@ -256,12 +288,12 @@ int tilemapGetTileAtPosition(lua_State* L)
     int x = pd->lua->getArgInt(2);
     int y = pd->lua->getArgInt(3);
 
-    if ((x < 1) || (x > map->width) || (y < 1) || (y > map->height)) {
+    if ((x < 1) || (x > this->width) || (y < 1) || (y > this->height)) {
         DM_LOG("Tilemap: Out of bounds values %d,%s for getTileAtPosition.", x, y);
         return 0;
     }
 
-    pd->lua->pushInt(map->map[((y - 1) * map->width) + (x - 1)]);
+    pd->lua->pushInt(this->map[((y - 1) * this->width) + (x - 1)]);
 
     return 1;
 }
@@ -270,26 +302,26 @@ int tilemapGetTileAtPosition(lua_State* L)
 // function Tilemap:setSize(width, height)
 int tilemapSetSize(lua_State* L)
 {
-    Tilemap* map = GET_TILEMAP_ARG(1);
-    if(map == NULL) {
+    Tilemap* this = GET_TILEMAP_ARG(1);
+    if(this == NULL) {
         DM_LOG("Tilemap: Error getting 'self' argument.");
         return 0;
     }
 
-    if (map->map != NULL) {
-        dmMemoryFree(map->map);
-        map->map = NULL;
+    if (this->map != NULL) {
+        dmMemoryFree(this->map);
+        this->map = NULL;
     }
     
-    map->width = pd->lua->getArgInt(2);
-    map->height = pd->lua->getArgInt(3);
+    this->width = pd->lua->getArgInt(2);
+    this->height = pd->lua->getArgInt(3);
 
-    if ((map->width == 0) || (map->width > 2048) || (map->height == 0) || (map->height > 2048)) {
-        DM_LOG("Tilemap: Trying to set an invalid size of %dx%d.", map->width, map->height);
+    if ((this->width == 0) || (this->width > 2048) || (this->height == 0) || (this->height > 2048)) {
+        DM_LOG("Tilemap: Trying to set an invalid size of %dx%d.", this->width, this->height);
         return 0;
     }
 
-    map->map = dmMemoryCalloc(map->width * map->height, sizeof(uint16_t));
+    this->map = dmMemoryCalloc(this->width * this->height, sizeof(uint16_t));
 
     return 0;
 }
@@ -298,14 +330,14 @@ int tilemapSetSize(lua_State* L)
 // function Tilemap:getSize()
 int tilemapGetSize(lua_State* L)
 {
-    Tilemap* map = GET_TILEMAP_ARG(1);
-    if(map == NULL) {
+    Tilemap* this = GET_TILEMAP_ARG(1);
+    if(this == NULL) {
         DM_LOG("Tilemap: Error getting 'self' argument.");
         return 0;
     }
     
-    pd->lua->pushInt(map->width);
-    pd->lua->pushInt(map->height);
+    pd->lua->pushInt(this->width);
+    pd->lua->pushInt(this->height);
     
     return 2;
 }
@@ -315,14 +347,14 @@ int tilemapGetSize(lua_State* L)
 // function Tilemap:getPixelSize()
 int tilemapGetPixelSize(lua_State* L)
 {
-    Tilemap* map = GET_TILEMAP_ARG(1);
-    if(map == NULL) {
+    Tilemap* this = GET_TILEMAP_ARG(1);
+    if(this == NULL) {
         DM_LOG("Tilemap: Error getting 'self' argument.");
         return 0;
     }
 
-    pd->lua->pushInt(map->width * map->tile_width);
-    pd->lua->pushInt(map->height * map->tile_height);
+    pd->lua->pushInt(this->width * this->tile_width);
+    pd->lua->pushInt(this->height * this->tile_height);
 
     return 2;
 }
@@ -331,14 +363,14 @@ int tilemapGetPixelSize(lua_State* L)
 // function Tilemap:getTileSize()
 int tilemapGetTileSize(lua_State* L)
 {
-    Tilemap* map = GET_TILEMAP_ARG(1);
-    if(map == NULL) {
+    Tilemap* this = GET_TILEMAP_ARG(1);
+    if(this == NULL) {
         DM_LOG("Tilemap: Error getting 'self' argument.");
         return 0;
     }
     
-    pd->lua->pushInt(map->tile_width);
-    pd->lua->pushInt(map->tile_height);
+    pd->lua->pushInt(this->tile_width);
+    pd->lua->pushInt(this->tile_height);
     
     return 2;
 }
