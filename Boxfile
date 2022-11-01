@@ -1,5 +1,5 @@
 {
     "toyboxes": {
-        "github.com/DidierMalenfant/pdbase": ">=2.0.0 <3.0.0"
+        "github.com/DidierMalenfant/pdbase": "2"
     }
 }
