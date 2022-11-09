@@ -24,6 +24,18 @@ return {
                         getTileSize = {}
                     }
                 },
+                OldCTilemap = {
+                    fields = {
+                        new = {},
+                        draw = {},
+                        setTileAtPosition = {},
+                        getTileAtPosition = {},
+                        setSize = {},
+                        getSize = {},
+                        getPixelSize = {},
+                        getTileSize = {}
+                    }
+                },
                 LuaTilemap = {
                     fields = {
                         super = {

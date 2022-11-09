@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "Tilemap/Tilemap.h"
+#include "Tilemap/OldCTilemap.h"
 
 #define DM_LOG_ENABLE
 #include "pdbase/pdbase.h"
@@ -12,6 +13,11 @@ static const lua_reg tilemapClass[];
 
 // -- Constants
 #define CLASSNAME_TILEMAP "dm.Tilemap"
+
+typedef struct {
+    LCDBitmap* bitmap;
+    int x, y;
+} Tile;
 
 // -- Tilemap class
 typedef struct {
@@ -24,7 +30,7 @@ typedef struct {
     int tile_height;
 
     int nb_of_tiles;
-    LCDBitmap** tiles;
+    Tile* tiles;
     
     uint16_t* map;
 } Tilemap;
@@ -42,6 +48,77 @@ extern void register_Tilemap(PlaydateAPI* api)
     {
         DM_LOG("dm.Tilemap: Failed to register the Tilemap class (%s).", err);
         return;
+    }
+    
+    register_OldCTilemap(api);
+}
+
+void setupTiles(Tilemap* this)
+{
+    int display_width = pd->display->getWidth();
+    int display_height = pd->display->getHeight();
+
+    int map_width_in_tiles = display_width / this->tile_width;
+    int map_height_in_tiles = display_height / this->tile_height;
+    
+    this->nb_of_tiles = map_width_in_tiles * map_height_in_tiles;
+    this->tiles = dmMemoryCalloc(this->nb_of_tiles, sizeof(Tile));
+
+    int image_width = this->tile_width;
+    int image_height = this->tile_height;
+
+    int draw_x = 0;
+    int draw_y = 0;
+    
+    int tile_x = 0;
+    int tile_y = 0;
+    
+    int current_tile_x = 0;
+    int current_tile_y = 0;
+    
+    int current_draw_x = 0;
+    int current_draw_y = 0;
+    
+    int width = this->width;
+    int height = this->height;
+    uint16_t* tilemap = this->map;
+    LCDBitmapTable* table = this->image_table;
+
+    Tile* current_tile = this->tiles;    
+    int tilemap_index = (current_tile_y * width) + current_tile_x;
+    while((current_draw_y < display_height) && (current_tile_y < height)) {
+        int next_tilemap_index_offset = width;
+    
+        while((current_draw_x < display_width) && (current_tile_x < width)) {
+            int tile_index = tilemap[tilemap_index] - 1;
+            if (tile_index != 0) {
+            
+                if (current_tile >= this->tiles + this->nb_of_tiles) {
+                    DM_LOG("BOOM");
+                    return;
+                }
+                
+                current_tile->bitmap = pd->graphics->getTableBitmap(this->image_table, tile_index);
+                current_tile->x = current_draw_x;
+                current_tile->y = current_draw_y;
+            }
+    
+            next_tilemap_index_offset -= 1;
+            tilemap_index += 1;
+    
+            current_draw_x += image_width;
+            current_tile_x += 1;
+            
+            ++current_tile;
+        }
+    
+        tilemap_index += next_tilemap_index_offset;
+    
+        current_tile_x = tile_x;
+        current_tile_y += 1;
+    
+        current_draw_x = draw_x;
+        current_draw_y += image_height;
     }
 }
 
@@ -66,20 +143,7 @@ int tilemapNew(lua_State* L)
         return 0;
     }
 
-    this->nb_of_tiles = 0;
-    for (; ;++this->nb_of_tiles) {
-        LCDBitmap* bitmap = pd->graphics->getTableBitmap(this->image_table, this->nb_of_tiles);
-        if (bitmap == NULL) {
-            break;
-        }
-    }
-
-    DM_LOG("Found %d tiles.", this->nb_of_tiles);
-    this->tiles = dmMemoryCalloc(this->nb_of_tiles, sizeof(LCDBitmap*));
-
-    for (int index = 0; index < this->nb_of_tiles;++index) {
-        this->tiles[index] = pd->graphics->getTableBitmap(this->image_table, index);
-    }
+    this->nb_of_tiles = *(uint16_t*)this->image_table;
     
     this->height = 0;
     this->width = 0;
@@ -121,7 +185,7 @@ int tilemapDelete(lua_State* L)
     
     if (this->tiles != NULL) {
         dmMemoryFree(this->tiles);
-        this->image_table = NULL;
+        this->tiles = NULL;
         this->nb_of_tiles = 0;
     }
     
@@ -145,6 +209,10 @@ int tilemapDraw(lua_State* L)
         DM_LOG("Tilemap: Error getting 'self' argument.");
         return 0;
     }
+    
+    if (this->tiles == NULL) {
+        setupTiles(this);
+    }
 
     if (this->map == NULL) {
         DM_LOG("Tilemap: Size of tilemap not set before draw().");
@@ -157,6 +225,9 @@ int tilemapDraw(lua_State* L)
     int x = pd->lua->getArgInt(2);
     int y = pd->lua->getArgInt(3);
 
+    pd->graphics->pushContext(NULL);
+    pd->graphics->setDrawOffset(x, y);
+
     int draw_x = x;
     int draw_y = y;
 
@@ -168,69 +239,28 @@ int tilemapDraw(lua_State* L)
         tile_x = (int)((draw_x - x) / image_width);
     }
 
-    if (tile_x >= this->width) {
-        return 0;
-    }
-
-    if (draw_y < -image_height) {
-        draw_y = -(-draw_y % image_height);
-        tile_y = (int)((draw_y - y) / image_height);
-    }
-
-    if (tile_y >= this->height) {
-        return 0;
-    }
-
-    int current_tile_x = tile_x;
-    int current_tile_y = tile_y;
-
-    int current_draw_x = draw_x;
-    int current_draw_y = draw_y;
-
-    int width = this->width;
-    int height = this->height;
-    uint16_t* tilemap = this->map;
-    LCDBitmapTable* table = this->image_table;
-
-    int display_width = pd->display->getWidth();
-    int display_height = pd->display->getHeight();
-
-    int tilemap_index = (current_tile_y * width) + current_tile_x;
-    while((current_draw_y < display_height) && (current_tile_y < height)) {
-        int next_tilemap_index_offset = width;
-
-        while((current_draw_x < display_width) && (current_tile_x < width)) {
-            int tile_index = tilemap[tilemap_index] - 1;
-            if (tile_index != 0) {
-                /*
-                if (tile_index >= this->nb_of_tiles) {
-                    DM_LOG("Tilemap: Invalid tile index %d.", tile_index);
-                    return 0;
-                }*/
-                
-                LCDBitmap* bitmap = this->tiles[tile_index];
-                //LCDBitmap* bitmap = pd->graphics->getTableBitmap(this->image_table, tile_index);
-                //if (bitmap != NULL) {
-                    pd->graphics->drawBitmap(bitmap, current_draw_x, current_draw_y, kBitmapUnflipped);
-                    //pd->graphics->drawBitmap(otherBitmap, current_draw_x, current_draw_y, kBitmapUnflipped);
-                //}
-            }
-
-            next_tilemap_index_offset -= 1;
-            tilemap_index += 1;
-
-            current_draw_x += image_width;
-            current_tile_x += 1;
+    if (tile_x < this->width) {
+        if (draw_y < -image_height) {
+            draw_y = -(-draw_y % image_height);
+            tile_y = (int)((draw_y - y) / image_height);
         }
-
-        tilemap_index += next_tilemap_index_offset;
-
-        current_tile_x = tile_x;
-        current_tile_y += 1;
-
-        current_draw_x = draw_x;
-        current_draw_y += image_height;
+        
+        if (tile_y < this->height) {
+            Tile* current_tile = this->tiles;
+            for (int i = 0; i < this->nb_of_tiles; ++i) {
+                LCDBitmap* bitmap = current_tile->bitmap;
+                if (bitmap != NULL) {
+                    pd->graphics->drawBitmap(bitmap, current_tile->x, current_tile->y, kBitmapUnflipped);
+                }
+            
+                ++current_tile;
+            }
+        }
+        
     }
+
+
+    pd->graphics->popContext();
 
     return 0;
 }

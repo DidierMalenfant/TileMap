@@ -13,4 +13,5 @@ UINCDIR := $(call uniq, $(UINCDIR) $(_RELATIVE_DIR))
 
 # -- Add our source files
 SRC := $(SRC) \
+	   $(_RELATIVE_DIR)/Tilemap/OldCTilemap.c \
 	   $(_RELATIVE_DIR)/Tilemap/Tilemap.c
